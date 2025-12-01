@@ -8,10 +8,10 @@ const config = {
   enemyRadius: 14,
   bulletRadius: 4,
   soldierSpeed: 220,
-  bulletSpeed: 420,
+  bulletSpeed: 460,
   enemyBaseSpeed: 90,
-  fireDelay: 0.22,
-  spawnDelay: 1.1,
+  fireDelay: 0.18,
+  spawnDelay: 1.05,
 };
 
 const state = {
@@ -95,12 +95,23 @@ function formationTarget(index, total) {
 }
 
 function handleFiring() {
-  const wantsFire = keys.has("Space");
-  if (!wantsFire) return;
   if (state.time - state.lastShot < config.fireDelay) return;
+  if (!state.enemies.length || !state.soldiers.length) return;
+
+  // Aim for the closest enemy to the squad center
+  const target = state.enemies.reduce((nearest, enemy) => {
+    const dist = Math.hypot(enemy.x - state.center.x, enemy.y - state.center.y);
+    return dist < nearest.dist ? { enemy, dist } : nearest;
+  }, { enemy: state.enemies[0], dist: Infinity }).enemy;
 
   const shooter = state.soldiers[Math.floor(Math.random() * state.soldiers.length)];
-  state.bullets.push({ x: shooter.x, y: shooter.y - 6, vx: 0, vy: -config.bulletSpeed });
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const vx = (dx / len) * config.bulletSpeed;
+  const vy = (dy / len) * config.bulletSpeed;
+
+  state.bullets.push({ x: shooter.x, y: shooter.y, vx, vy });
   state.lastShot = state.time;
 }
 
@@ -111,8 +122,13 @@ function spawnEnemy() {
 }
 
 function updateBullets(dt) {
-  state.bullets.forEach((b) => (b.y += b.vy * dt));
-  state.bullets = state.bullets.filter((b) => b.y > -40 && b.y < canvas.height + 40);
+  state.bullets.forEach((b) => {
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+  });
+  state.bullets = state.bullets.filter(
+    (b) => b.y > -40 && b.y < canvas.height + 40 && b.x > -40 && b.x < canvas.width + 40,
+  );
 }
 
 function updateEnemies(dt) {
@@ -182,19 +198,41 @@ function render() {
 }
 
 function drawBackdrop() {
-  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  gradient.addColorStop(0, "#0f1624");
-  gradient.addColorStop(1, "#0a0d13");
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = "#080a10";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = "rgba(255,255,255,0.06)";
-  ctx.lineWidth = 1;
-  for (let y = 80; y < canvas.height; y += 60) {
-    ctx.beginPath();
-    ctx.moveTo(60, y);
-    ctx.lineTo(canvas.width - 60, y);
-    ctx.stroke();
+  // Outer abyss
+  const abyssGrad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  abyssGrad.addColorStop(0, "#070912");
+  abyssGrad.addColorStop(1, "#0a0d14");
+  ctx.fillStyle = abyssGrad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Main lane
+  const laneWidth = 520;
+  const laneX = (canvas.width - laneWidth) / 2;
+  const laneGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  laneGrad.addColorStop(0, "#3d0f1a");
+  laneGrad.addColorStop(1, "#801f2e");
+  ctx.fillStyle = laneGrad;
+  ctx.fillRect(laneX, 40, laneWidth, canvas.height - 80);
+
+  // Checker tiles
+  for (let y = 40; y < canvas.height - 40; y += 42) {
+    for (let x = laneX; x < laneX + laneWidth; x += 42) {
+      ctx.fillStyle = (x / 42 + y / 42) % 2 === 0 ? "#912333" : "#7a1d2a";
+      ctx.fillRect(x + 2, y + 2, 38, 38);
+    }
+  }
+
+  // Railings
+  ctx.fillStyle = "#1d1f29";
+  ctx.fillRect(laneX - 20, 40, 20, canvas.height - 80);
+  ctx.fillRect(laneX + laneWidth, 40, 20, canvas.height - 80);
+  ctx.fillStyle = "#2b303c";
+  for (let y = 40; y < canvas.height - 60; y += 26) {
+    ctx.fillRect(laneX - 22, y, 24, 8);
+    ctx.fillRect(laneX + laneWidth - 2, y, 24, 8);
   }
 }
 
@@ -226,50 +264,76 @@ function drawHealth() {
 }
 
 function drawSoldiers() {
-  ctx.fillStyle = "#0e0";
   state.soldiers.forEach((soldier) => {
-    ctx.beginPath();
-    ctx.fillStyle = "#2ecc71";
+    ctx.save();
+    ctx.translate(soldier.x, soldier.y);
+    ctx.fillStyle = "#31d87a";
     ctx.strokeStyle = "#1f8f52";
     ctx.lineWidth = 3;
-    ctx.arc(soldier.x, soldier.y, config.soldierRadius, 0, Math.PI * 2);
+    ctx.beginPath();
+    ctx.arc(0, 0, config.soldierRadius + 2, Math.PI * 0.05, Math.PI * 1.95);
     ctx.fill();
     ctx.stroke();
 
-    // Green patch (armband)
+    // Helmet
+    ctx.fillStyle = "#26b864";
     ctx.beginPath();
-    ctx.strokeStyle = "#a0ffb4";
-    ctx.lineWidth = 4;
-    ctx.arc(soldier.x, soldier.y, config.soldierRadius - 3, Math.PI * 0.15, Math.PI * 0.55);
+    ctx.arc(0, -2, config.soldierRadius - 2, Math.PI, 0);
+    ctx.fill();
+
+    // Visor streak
+    ctx.strokeStyle = "#d5ffe8";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, -2, config.soldierRadius - 4, Math.PI * 1.1, Math.PI * 1.9);
     ctx.stroke();
+    ctx.restore();
   });
 }
 
 function drawEnemies() {
   state.enemies.forEach((enemy) => {
+    ctx.save();
     ctx.beginPath();
-    ctx.fillStyle = "#3498db";
+    ctx.fillStyle = "#3aa7ff";
     ctx.strokeStyle = "#1f6fa8";
     ctx.lineWidth = 3;
-    ctx.arc(enemy.x, enemy.y, config.enemyRadius, 0, Math.PI * 2);
+    ctx.arc(enemy.x, enemy.y, config.enemyRadius + 1, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // Blue patch
+    // Backpack / armor
+    ctx.fillStyle = "#2d84cc";
     ctx.beginPath();
-    ctx.strokeStyle = "#8fc3ff";
+    ctx.arc(enemy.x, enemy.y + 4, config.enemyRadius - 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Patch
+    ctx.beginPath();
+    ctx.strokeStyle = "#b8dcff";
     ctx.lineWidth = 4;
     ctx.arc(enemy.x, enemy.y, config.enemyRadius - 4, -Math.PI * 0.2, Math.PI * 0.1);
     ctx.stroke();
+
+    // Face visor
+    ctx.strokeStyle = "#e8f4ff";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y - 2, config.enemyRadius - 6, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke();
+    ctx.restore();
   });
 }
 
 function drawBullets() {
-  ctx.fillStyle = "#e9f0ff";
+  ctx.fillStyle = "#f5f8ff";
   state.bullets.forEach((b) => {
     ctx.beginPath();
+    ctx.shadowColor = "#d9e7ff";
+    ctx.shadowBlur = 8;
     ctx.arc(b.x, b.y, config.bulletRadius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
   });
 }
 

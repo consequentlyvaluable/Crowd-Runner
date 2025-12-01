@@ -5,7 +5,7 @@ A lightweight browser mini-game inspired by Crowd Runner / Mob Runner / Count Ma
 ## How to play
 - Open `index.html` in your browser (or run `python -m http.server` and visit `http://localhost:8000`).
 - Move the squad with **WASD** or **Arrow Keys**.
-- Hold **Space** to fire bullets from random squad members.
+- The squad now auto-aims and auto-fires toward nearby enemies.
 - Survive waves of enemies while keeping your squad alive.
 
 ## Notes
